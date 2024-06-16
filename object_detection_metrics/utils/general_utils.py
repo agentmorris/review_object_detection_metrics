@@ -1,11 +1,13 @@
-import fnmatch
 import os
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from PyQt5 import QtCore, QtGui
-from src.utils.enumerators import BBFormat
+try:
+    from PyQt5 import QtCore, QtGui
+except Exception:
+    pass    
+from object_detection_metrics.utils.enumerators import BBFormat
 
 
 def get_classes_from_txt_file(filepath_classes_det):

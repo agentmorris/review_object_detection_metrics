@@ -22,7 +22,7 @@
 from collections import defaultdict
 
 import numpy as np
-from src.bounding_box import BBFormat
+from object_detection_metrics.bounding_box import BBFormat
 
 
 def get_coco_summary(groundtruth_bbs, detected_bbs):
@@ -73,7 +73,7 @@ def get_coco_summary(groundtruth_bbs, detected_bbs):
         for class_id in _evals:
             acc = _evals[class_id]
             acc["scores"] = np.concatenate(acc["scores"])
-            acc["matched"] = np.concatenate(acc["matched"]).astype(np.bool)
+            acc["matched"] = np.concatenate(acc["matched"]).astype(bool)
             acc["NP"] = np.sum(acc["NP"])
 
         res = []

@@ -1,11 +1,10 @@
-import os
-
 import numpy as np
-from src.evaluators.pascal_voc_evaluator import (calculate_ap_11_point_interp,
+
+from object_detection_metrics.evaluators.pascal_voc_evaluator import (calculate_ap_11_point_interp,
                                                  calculate_ap_every_point)
-from src.tube import Tube
-from src.utils.enumerators import MethodAveragePrecision
-from src.utils.read_files import File
+from object_detection_metrics.tube import Tube
+from object_detection_metrics.utils.enumerators import MethodAveragePrecision
+from object_detection_metrics.utils.read_files import File
 
 
 class TubeEvaluator():
@@ -20,7 +19,7 @@ class TubeEvaluator():
         Args:
             anno_filepath (str): annotation filepath
             preds_filepath (str): prediction filepath in json extension
-            method (MethodAveragePrecision, optional): Recall interpolation method (see src.utils.enumerators). Defaults to MethodAveragePrecision.EVERY_POINT_INTERPOLATION.
+            method (MethodAveragePrecision, optional): Recall interpolation method (see utils.enumerators). Defaults to MethodAveragePrecision.EVERY_POINT_INTERPOLATION.
         """
 
         if not anno_filepath.endswith('.json'):
