@@ -20,6 +20,7 @@
 """
 
 from collections import defaultdict
+from tqdm import tqdm
 
 import numpy as np
 from object_detection_metrics.bounding_box import BBFormat
@@ -46,13 +47,16 @@ def get_coco_summary(groundtruth_bbs, detected_bbs):
             A dictionary with one entry for each metric.
     """
 
+    print('Grouping detections by image/class')
+    
     # separate bbs per image X class
     _bbs = _group_detections(detected_bbs, groundtruth_bbs)
 
-    # pairwise ious
+    # pairwise IoUs
     _ious = {k: _compute_ious(**v) for k, v in _bbs.items()}
 
     def _evaluate(iou_threshold, max_dets, area_range):
+        
         # accumulate evaluations on a per-class basis
         _evals = defaultdict(lambda: {"scores": [], "matched": [], "NP": []})
         for img_id, class_id in _bbs:
@@ -77,6 +81,7 @@ def get_coco_summary(groundtruth_bbs, detected_bbs):
             acc["NP"] = np.sum(acc["NP"])
 
         res = []
+        
         # run ap calculation per-class
         for class_id in _evals:
             ev = _evals[class_id]
@@ -86,25 +91,33 @@ def get_coco_summary(groundtruth_bbs, detected_bbs):
             })
         return res
 
+    # ...def _evaluate(...)
+    
     iou_thresholds = np.linspace(0.5, 0.95, int(np.round((0.95 - 0.5) / 0.05)) + 1, endpoint=True)
 
+    print('Computing AP')
+    
     # compute simple AP with all thresholds, using up to 100 dets, and all areas
     full = {
         i: _evaluate(iou_threshold=i, max_dets=100, area_range=(0, np.inf))
-        for i in iou_thresholds
+        for i in tqdm(iou_thresholds)
     }
 
     AP50 = np.mean([x['AP'] for x in full[0.50] if x['AP'] is not None])
     AP75 = np.mean([x['AP'] for x in full[0.75] if x['AP'] is not None])
     AP = np.mean([x['AP'] for k in full for x in full[k] if x['AP'] is not None])
 
+    print('AP is {}'.format(AP))
+    
     # max recall for 100 dets can also be calculated here
     AR100 = np.mean(
         [x['TP'] / x['total positives'] for k in full for x in full[k] if x['TP'] is not None])
 
+    print('Computing "small" AP')
+    
     small = {
         i: _evaluate(iou_threshold=i, max_dets=100, area_range=(0, 32**2))
-        for i in iou_thresholds
+        for i in tqdm(iou_thresholds)
     }
     APsmall = [x['AP'] for k in small for x in small[k] if x['AP'] is not None]
     APsmall = np.nan if APsmall == [] else np.mean(APsmall)
@@ -113,9 +126,11 @@ def get_coco_summary(groundtruth_bbs, detected_bbs):
     ]
     ARsmall = np.nan if ARsmall == [] else np.mean(ARsmall)
 
+    print('Computing "medium" AP')
+
     medium = {
         i: _evaluate(iou_threshold=i, max_dets=100, area_range=(32**2, 96**2))
-        for i in iou_thresholds
+        for i in tqdm(iou_thresholds)
     }
     APmedium = [x['AP'] for k in medium for x in medium[k] if x['AP'] is not None]
     APmedium = np.nan if APmedium == [] else np.mean(APmedium)
@@ -124,9 +139,11 @@ def get_coco_summary(groundtruth_bbs, detected_bbs):
     ]
     ARmedium = np.nan if ARmedium == [] else np.mean(ARmedium)
 
+    print('Computing "large" AP')
+    
     large = {
         i: _evaluate(iou_threshold=i, max_dets=100, area_range=(96**2, np.inf))
-        for i in iou_thresholds
+        for i in tqdm(iou_thresholds)
     }
     APlarge = [x['AP'] for k in large for x in large[k] if x['AP'] is not None]
     APlarge = np.nan if APlarge == [] else np.mean(APlarge)
@@ -135,17 +152,21 @@ def get_coco_summary(groundtruth_bbs, detected_bbs):
     ]
     ARlarge = np.nan if ARlarge == [] else np.mean(ARlarge)
 
+    print('Computing max_det1')
+    
     max_det1 = {
         i: _evaluate(iou_threshold=i, max_dets=1, area_range=(0, np.inf))
-        for i in iou_thresholds
+        for i in tqdm(iou_thresholds)
     }
     AR1 = np.mean([
         x['TP'] / x['total positives'] for k in max_det1 for x in max_det1[k] if x['TP'] is not None
     ])
 
+    print('Computing max_det10')
+    
     max_det10 = {
         i: _evaluate(iou_threshold=i, max_dets=10, area_range=(0, np.inf))
-        for i in iou_thresholds
+        for i in tqdm(iou_thresholds)
     }
     AR10 = np.mean([
         x['TP'] / x['total positives'] for k in max_det10 for x in max_det10[k]
@@ -299,6 +320,7 @@ def _compute_ious(dt, gt):
 
 def _evaluate_image(dt, gt, ious, iou_threshold, max_dets=None, area_range=None):
     """ use COCO's method to associate detections to ground truths """
+    
     # sort dts by increasing confidence
     dt_sort = np.argsort([-d.get_confidence() for d in dt], kind="stable")
 
@@ -324,6 +346,7 @@ def _evaluate_image(dt, gt, ious, iou_threshold, max_dets=None, area_range=None)
     dtm = {}
 
     for d_idx, d in enumerate(dt):
+        
         # information about best match so far (m=-1 -> unmatched)
         iou = min(iou_threshold, 1 - 1e-10)
         m = -1
@@ -340,6 +363,7 @@ def _evaluate_image(dt, gt, ious, iou_threshold, max_dets=None, area_range=None)
             # if match successful and best so far, store appropriately
             iou = ious[d_idx, g_idx]
             m = g_idx
+            
         # if match made store id of match for both dt and gt
         if m == -1:
             continue

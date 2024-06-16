@@ -139,10 +139,6 @@ def get_files_dir(directory, extensions=['*']):
     return ret
 
 
-def remove_file_extension(filename):
-    return os.path.join(os.path.dirname(filename), os.path.splitext(filename)[0])
-
-
 def image_to_pixmap(image):
     image = image.astype(np.uint8)
     if image.shape[2] == 4:
@@ -161,13 +157,18 @@ def show_image_in_qt_component(image, label_component):
     label_component.setAlignment(QtCore.Qt.AlignCenter)
 
 
-def get_files_recursively(directory, extension="*"):
-    files = [
-        os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(directory)
-        for f in get_files_dir(directory, [extension])
-    ]
+def get_files_recursively(directory):
+    
+    files = []
+
+    for root, _, filenames in os.walk(directory):
+        for filename in filenames:
+            full_path = os.path.join(root, filename)
+            files.append(full_path)
+
     # Disconsider hidden files, such as .DS_Store in the MAC OS
     ret = [f for f in files if not os.path.basename(f).startswith('.')]
+    
     return ret
 
 
@@ -185,6 +186,7 @@ def get_file_name_only(file_path):
 
 # allowed_extensions is used only when match_extension=False
 def find_file(directory, file_name, match_extension=True, allowed_extensions=[]):
+    
     if os.path.isdir(directory) is False:
         return None
     for dirpath, dirnames, files in os.walk(directory):

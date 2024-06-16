@@ -4,14 +4,15 @@ import os
 import xml.etree.ElementTree as ET
 
 import pandas as pd
+from tqdm import tqdm
 
 import object_detection_metrics.utils.general_utils as general_utils
 import object_detection_metrics.utils.validations as validations
 from object_detection_metrics.bounding_box import BoundingBox
 from object_detection_metrics.utils.enumerators import BBFormat, BBType, CoordinatesType
 
-
 def _get_annotation_files(file_path):
+    
     # Path can be a directory containing all files or a directory containing multiple files
     if file_path is None:
         return []
@@ -20,22 +21,32 @@ def _get_annotation_files(file_path):
         annotation_files = [file_path]
     elif os.path.isdir(file_path):
         annotation_files = general_utils.get_files_recursively(file_path)
+        
+    # This file originally returned paths using the native path separator, now we convert \\
+    # to / for consistency across representations.
+    annotation_files = [fn.replace('\\','/') for fn in annotation_files]
     return sorted(annotation_files)
 
 
 def coco2bb(path, bb_type=BBType.GROUND_TRUTH):
+    
     ret = []
+    
     # Get annotation files in the path
     annotation_files = _get_annotation_files(path)
+    
     # Loop through each file
     for file_path in annotation_files:
+        
+        print('Processing COCO annotation file {}'.format(file_path))
+        
         if not validations.is_coco_format(file_path):
             continue
 
         with open(file_path, "r") as f:
             json_object = json.load(f)
 
-        # COCO json file contains basically 3 lists:
+        # COCO json file contains three lists:
         # categories: containing the classes
         # images: containing information of the images (width, height and filename)
         # annotations: containing information of the bounding boxes (x1, y1, bb_width, bb_height)
@@ -56,15 +67,19 @@ def coco2bb(path, bb_type=BBType.GROUND_TRUTH):
             annotations = json_object['annotations']
 
         for annotation in annotations:
+            
             img_id = annotation['image_id']
             x1, y1, bb_width, bb_height = annotation['bbox']
             if bb_type == BBType.DETECTED and 'score' not in annotation.keys():
                 print('Warning: Confidence not found in the JSON file!')
                 return ret
             confidence = annotation['score'] if bb_type == BBType.DETECTED else None
-            # Make image name only the filename, without extension
-            img_name = images[img_id]['file_name']
-            img_name = general_utils.get_file_name_only(img_name)
+            img_name = images[img_id]['file_name'].replace('\\','/')
+            
+            # This code originally used just the base filename, which doesn't support 
+            # datasets with subfolders.
+            # img_name = general_utils.get_file_name_only(img_name)
+            
             # create BoundingBox object
             bb = BoundingBox(image_name=img_name,
                              class_id=classes[annotation['category_id']],
@@ -75,11 +90,23 @@ def coco2bb(path, bb_type=BBType.GROUND_TRUTH):
                              bb_type=bb_type,
                              format=BBFormat.XYWH)
             ret.append(bb)
+
+        # ...for each annotation in this .json file
+    
+    # ...for each COCO .json file
+    
     return ret
+
+# ...def coco2bb(...)
 
 
 def cvat2bb(path):
-    '''This format supports ground-truth only'''
+    """
+    This format supports ground-truth only
+    """
+    
+    raise NotImplementedError("This function hasn't been updated to deal with subfolders")
+    
     ret = []
     # Get annotation files in the path
     annotation_files = _get_annotation_files(path)
@@ -92,7 +119,7 @@ def cvat2bb(path):
         for image_info in ET.parse(file_path).iter('image'):
             img_size = (int(image_info.attrib['width']), int(image_info.attrib['height']))
             img_name = image_info.attrib['name']
-            img_name = general_utils.get_file_name_only(img_name)
+            # img_name = general_utils.get_file_name_only(img_name)
 
             # Loop through the boxes
             for box_info in image_info.iter('box'):
@@ -113,6 +140,9 @@ def cvat2bb(path):
 
 
 def openimage2bb(annotations_path, images_dir, bb_type=BBType.GROUND_TRUTH):
+    
+    raise NotImplementedError("This function hasn't been updated to deal with subfolders")
+    
     ret = []
     # Get annotation files in the path
     annotation_files = _get_annotation_files(annotations_path)
@@ -161,6 +191,9 @@ def openimage2bb(annotations_path, images_dir, bb_type=BBType.GROUND_TRUTH):
 
 
 def imagenet2bb(annotations_path):
+    
+    raise NotImplementedError("This function hasn't been updated to deal with subfolders")
+    
     ret = []
     # Get annotation files in the path
     annotation_files = _get_annotation_files(annotations_path)
@@ -198,19 +231,39 @@ def vocpascal2bb(annotations_path):
 
 def labelme2bb(annotations_path):
     ret = []
+    
     # Get annotation files in the path
     annotation_files = _get_annotation_files(annotations_path)
+    
     # Loop through each file
     for file_path in annotation_files:
+        
+        # Should be redundant now that _get_annotation_files converts \ to /
+        file_path = file_path.replace('\\','/')
+        
         if not validations.is_labelme_format(file_path):
             continue
+        
         # Parse the JSON file
         with open(file_path, "r") as f:
             json_object = json.load(f)
-        img_path = json_object['imagePath']
-        img_path = os.path.basename(img_path)
-        img_path = general_utils.get_file_name_only(img_path)
+          
+        # Don't use the imagePath object stored in the labelme file, which is only 
+        # the base filename.
+        stored_image_path = json_object['imagePath']
+        image_extension = os.path.splitext(stored_image_path)[1]
+        annotation_file_without_extension = os.path.splitext(file_path)[0]
+        image_path_abs = annotation_file_without_extension + image_extension
+        
+        if os.path.basename(image_path_abs) != stored_image_path:
+            print('Warning: inconsistent labelme file naming: {} vs. {}'.format(
+                stored_image_path,image_path_abs))
+            
+        # img_path = json_object['imagePath']
+        # img_path = os.path.basename(img_path)
+        # img_path = general_utils.get_file_name_only(img_path)
         img_size = (int(json_object['imageWidth']), int(json_object['imageHeight']))
+        
         # If there are annotated objects
         if 'shapes' in json_object:
             # Loop through bounding boxes
@@ -222,7 +275,7 @@ def labelme2bb(annotations_path):
                     continue
                 x1, y1, x2, y2 = int(float(x1)), int(float(y1)), int(float(x2)), int(float(y2))
 
-                bb = BoundingBox(image_name=img_path,
+                bb = BoundingBox(image_name=image_path_abs,
                                  class_id=obj_label,
                                  coordinates=(x1, y1, x2, y2),
                                  img_size=img_size,
@@ -239,6 +292,9 @@ def text2bb(annotations_path,
             bb_format=BBFormat.XYWH,
             type_coordinates=CoordinatesType.ABSOLUTE,
             img_dir=None):
+    
+    raise NotImplementedError("This function hasn't been updated to deal with subfolders")
+    
     ret = []
 
     # Get annotation files in the path
@@ -310,29 +366,44 @@ def text2bb(annotations_path,
 
 
 def yolo2bb(annotations_path, images_dir, file_obj_names, bb_type=BBType.GROUND_TRUTH):
+    
     ret = []
     if not os.path.isfile(file_obj_names):
         print(f'Warning: File with names of classes {file_obj_names} not found.')
         return ret
+    
     # Load classes
     all_classes = []
     with open(file_obj_names, "r") as f:
         all_classes = [line.replace('\n', '') for line in f]
+    
+    print('Enumerating annotation files in {}'.format(annotations_path))
+    
     # Get annotation files in the path
     annotation_files = _get_annotation_files(annotations_path)
+    
+    print('Found {} files, converting to absolute coordinates'.format(len(annotation_files)))
+    
     # Loop through each file
-    for file_path in annotation_files:
+    for file_path in tqdm(annotation_files):
+        
         if not validations.is_yolo_format(file_path, bb_types=[bb_type]):
             continue
-        img_name = os.path.basename(file_path)
-        img_file = general_utils.find_image_file(images_dir, img_name)
+        
+        # Should be redundant, now that _get_annotation_files has been updated to 
+        # replace \ with /
+        file_path = file_path.replace('\\','/')
+        img_name = file_path # os.path.basename(file_path)
+        img_file = file_path # general_utils.find_image_file(images_dir, img_name)
         img_resolution = general_utils.get_image_resolution(img_file)
         if img_resolution is None:
             print(f'Warning: It was not possible to find the resolution of image {img_name}')
             continue
         img_size = (img_resolution['width'], img_resolution['height'])
+        
         # Loop through lines
         with open(file_path, "r") as f:
+            
             for line in f:
                 if line.replace(' ', '') == '\n':
                     continue
@@ -360,7 +431,7 @@ def yolo2bb(annotations_path, images_dir, file_obj_names, bb_type=BBType.GROUND_
                     y1 = float(splitted_line[3])
                     w = float(splitted_line[4])
                     h = float(splitted_line[5])
-                bb = BoundingBox(image_name=general_utils.get_file_name_only(img_file),
+                bb = BoundingBox(image_name=img_file, #image_name=general_utils.get_file_name_only(img_file),
                                  class_id=all_classes[class_id],
                                  coordinates=(x1, y1, w, h),
                                  img_size=img_size,
@@ -369,10 +440,14 @@ def yolo2bb(annotations_path, images_dir, file_obj_names, bb_type=BBType.GROUND_
                                  bb_type=bb_type,
                                  format=BBFormat.YOLO)
                 ret.append(bb)
+                
     return ret
 
 
 def xml2csv(xml_path):
+    
+    raise NotImplementedError("This function hasn't been updated to deal with subfolders")
+    
     # Adapted from https://stackoverflow.com/questions/63061428/convert-labelimg-xml-rectangles-to-labelme-json-polygons-with-image-data
     xml_list = []
     xml_df = pd.DataFrame()
@@ -407,7 +482,7 @@ def xml2csv(xml_path):
                 'height'
             ]
             xml_df = pd.DataFrame(xml_list, columns=column_name)
-    except Exception as e:
+    except Exception:
         return pd.DataFrame(columns=[
             'ImageID', 'Source', 'LabelName', 'Confidence', 'XMin', 'XMax', 'YMin', 'YMax',
             'IsOccluded', 'IsTruncated', 'IsGroupOf', 'IsDepiction', 'IsInside', 'width', 'height'
@@ -436,6 +511,9 @@ def xml2csv(xml_path):
 
 
 def df2labelme(symbolDict, dir_image):
+    
+    raise NotImplementedError("This function hasn't been updated to deal with subfolders")
+    
     try:
         symbolDict.rename(columns={
             'LabelName': 'label',

@@ -11,6 +11,7 @@ setup(
         'numpy',
         'pandas',
         'opencv-python',
-        'matplotlib'
+        'matplotlib',
+        'tqdm'
     ]    
 )
