@@ -66,12 +66,18 @@ def coco2bb(path, bb_type=BBType.GROUND_TRUTH):
         if 'annotations' in json_object:
             annotations = json_object['annotations']
 
+        annotations_without_bounding_boxes = []
+        
         for annotation in annotations:
-            
+
+            if 'bbox' not in annotation:
+                annotations_without_bounding_boxes.append(annotation)
+                continue
+                
             img_id = annotation['image_id']
             x1, y1, bb_width, bb_height = annotation['bbox']
             if bb_type == BBType.DETECTED and 'score' not in annotation.keys():
-                print('Warning: Confidence not found in the JSON file!')
+                print('Warning: confidence not found in the JSON file')
                 return ret
             confidence = annotation['score'] if bb_type == BBType.DETECTED else None
             img_name = images[img_id]['file_name'].replace('\\','/')
@@ -92,7 +98,12 @@ def coco2bb(path, bb_type=BBType.GROUND_TRUTH):
             ret.append(bb)
 
         # ...for each annotation in this .json file
-    
+
+        if len(annotations_without_bounding_boxes) > 0:
+            print('Warning: {} annotations in {} don\'t have bounding boxes'.format(
+                len(annotations_without_bounding_boxes),
+                file_path))
+        
     # ...for each COCO .json file
     
     return ret
