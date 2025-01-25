@@ -26,7 +26,7 @@ import numpy as np
 from object_detection_metrics.bounding_box import BBFormat
 
 
-def get_coco_summary(groundtruth_bbs, detected_bbs):
+def get_coco_summary(groundtruth_bbs, detected_bbs, include_recall_metrics=False):
     """Calculate the 12 standard metrics used in COCOEval,
         AP, AP50, AP75,
         AR1, AR10, AR100,
@@ -152,41 +152,49 @@ def get_coco_summary(groundtruth_bbs, detected_bbs):
     ]
     ARlarge = np.nan if ARlarge == [] else np.mean(ARlarge)
 
-    print('Computing max_det1')
+    if include_recall_metrics:
+        
+        print('Computing max_det1')
+        
+        max_det1 = {
+            i: _evaluate(iou_threshold=i, max_dets=1, area_range=(0, np.inf))
+            for i in tqdm(iou_thresholds)
+        }
+        AR1 = np.mean([
+            x['TP'] / x['total positives'] for k in max_det1 for x in max_det1[k] if x['TP'] is not None
+        ])
     
-    max_det1 = {
-        i: _evaluate(iou_threshold=i, max_dets=1, area_range=(0, np.inf))
-        for i in tqdm(iou_thresholds)
-    }
-    AR1 = np.mean([
-        x['TP'] / x['total positives'] for k in max_det1 for x in max_det1[k] if x['TP'] is not None
-    ])
+        print('Computing max_det10')
+        
+        max_det10 = {
+            i: _evaluate(iou_threshold=i, max_dets=10, area_range=(0, np.inf))
+            for i in tqdm(iou_thresholds)
+        }
+        AR10 = np.mean([
+            x['TP'] / x['total positives'] for k in max_det10 for x in max_det10[k]
+            if x['TP'] is not None
+        ])
 
-    print('Computing max_det10')
+    # ...if we are computing recall metrics
     
-    max_det10 = {
-        i: _evaluate(iou_threshold=i, max_dets=10, area_range=(0, np.inf))
-        for i in tqdm(iou_thresholds)
-    }
-    AR10 = np.mean([
-        x['TP'] / x['total positives'] for k in max_det10 for x in max_det10[k]
-        if x['TP'] is not None
-    ])
-
-    return {
+    d = {
         "AP": AP,
         "AP50": AP50,
         "AP75": AP75,
         "APsmall": APsmall,
         "APmedium": APmedium,
-        "APlarge": APlarge,
-        "AR1": AR1,
-        "AR10": AR10,
-        "AR100": AR100,
-        "ARsmall": ARsmall,
-        "ARmedium": ARmedium,
-        "ARlarge": ARlarge
+        "APlarge": APlarge        
     }
+    
+    if include_recall_metrics:
+        d["AR1"] = AR1
+        d["AR10"] = AR10
+        d["AR100"] = AR100
+        d["ARsmall"] = ARsmall
+        d["ARmedium"] = ARmedium
+        d["ARlarge"] = ARlarge
+    
+    return d
 
 
 def get_coco_metrics(
